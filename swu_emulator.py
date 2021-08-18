@@ -1146,6 +1146,8 @@ class swu():
 
 
     def encode_payload_type_ninr(self, lowest = 0):
+        if self.nounce:
+            return self.nounce
         if lowest == 0:    
             payload_ninr = self.return_random_bytes(16)
         elif lowest == -1:
@@ -1886,8 +1888,15 @@ class swu():
         #create SPIi
         if same_spi == False: self.ike_spi_initiator = self.return_random_bytes(8)
         self.ike_spi_responder = (0).to_bytes(8,'big')
-        header = self.encode_header(self.ike_spi_initiator, self.ike_spi_responder, SA, 2, 0, IKE_SA_INIT, (0,0,1), self.message_id_request)
-        payload = self.encode_generic_payload_header(KE,0,self.encode_payload_type_sa(self.sa_list))
+        if self.cookie:
+            header = self.encode_header(self.ike_spi_initiator, self.ike_spi_responder, N, 2, 0, IKE_SA_INIT, (0,0,1), self.message_id_request)
+            notify = self.encode_payload_type_n(0,b'',COOKIE,self.cookie)
+            print("notify: %s" % notify)
+            payload = self.encode_generic_payload_header(SA,0,self.encode_payload_type_n(0,b'',COOKIE,self.cookie))
+        else:
+            header = self.encode_header(self.ike_spi_initiator, self.ike_spi_responder, SA, 2, 0, IKE_SA_INIT, (0,0,1), self.message_id_request)
+            payload = b''
+        payload += self.encode_generic_payload_header(KE,0,self.encode_payload_type_sa(self.sa_list))
         payload += self.encode_generic_payload_header(NINR,0,self.encode_payload_type_ke())  
         if self.check_nat == False:        
             payload += self.encode_generic_payload_header(NONE,0,self.encode_payload_type_ninr())        
@@ -2035,6 +2044,8 @@ class swu():
 
     def state_1(self, retry = False): #Send IKE_SA_INIT and process answer
         self.message_id_request = 0
+        self.cookie = None
+        self.nounce = None
         packet = self.create_IKE_SA_INIT(retry)
         
         self.AUTH_SA_INIT_packet = packet #needed for AUTH Payload in state 4
@@ -2057,7 +2068,35 @@ class swu():
         except: #timeout          
             return TIMEOUT,'TIMEOUT'
         
-        
+        if self.ike_decoded_header['exchange_type'] == IKE_SA_INIT:
+            print('received IKE_SA_INIT')        
+            for i in self.decoded_payload:
+                if i[0] == N:
+                    if i[1][1] == COOKIE:
+                        self.cookie = i[1][3]
+        else:
+            return DECODING_ERROR,'DECODING_ERROR'
+
+        packet = self.create_IKE_SA_INIT(True)
+        self.AUTH_SA_INIT_packet = packet #needed for AUTH Payload in state 4
+        self.send_data(packet)
+        print('sending IKE_SA_INIT')
+
+        try:
+        #if True:
+            while True:
+                if self.userplane_mode == ESP_PROTOCOL:
+                    packet, address = self.socket.recvfrom(2000)  
+                    self.decode_ike(packet)
+                    if self.ike_decoded_ok == True: break                
+                else:                 
+                    packet, address = self.socket_nat.recvfrom(2000)                     
+                    self.decode_ike(packet[4:])
+                    if self.ike_decoded_ok == True: break                     
+
+        except: #timeout
+            return TIMEOUT,'TIMEOUT'
+
         if self.ike_decoded_header['exchange_type'] == IKE_SA_INIT:
             print('received IKE_SA_INIT')        
             for i in self.decoded_payload:
