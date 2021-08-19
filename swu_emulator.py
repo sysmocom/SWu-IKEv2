@@ -3106,18 +3106,23 @@ def bcd(chars):
         bcd_string += chars[1+2*i] + chars[2*i]
     return bcd_string
 
+def transceive_apdu(connection, hex_apdu):
+    data, sw1, sw2 = connection.transmit(toBytes(hex_apdu))
+    result = toHexString(data).replace(" ","")
+    print("APDU: C:%s R:%s SW:%02x%02x" % (hex_apdu, result,sw1,sw2))
+    return result, sw1, sw2
+
 def read_imsi(reader_index):
     imsi = None
     r = readers()
     connection = r[int(reader_index)].createConnection()
     connection.connect()
-    data, sw1, sw2 = connection.transmit(toBytes('00A40000023F00'))     
-    data, sw1, sw2 = connection.transmit(toBytes('00A40000027F20'))
-    data, sw1, sw2 = connection.transmit(toBytes('00A40000026F07'))
-    data, sw1, sw2 = connection.transmit(toBytes('00B0000009'))  
-    result = toHexString(data).replace(" ","")
-    imsi = bcd(result)[-15:]
-    
+    data, sw1, sw2 = transceive_apdu(connection, '00A40004023F00')
+    data, sw1, sw2 = transceive_apdu(connection, '00A40004027F20')
+    data, sw1, sw2 = transceive_apdu(connection, '00A40004026F07')
+    data, sw1, sw2 = transceive_apdu(connection, '00B0000009')
+    imsi = bcd(data)[-15:]
+
     return imsi
 
 def read_res_ck_ik(reader_index, rand, autn):
@@ -3127,16 +3132,15 @@ def read_res_ck_ik(reader_index, rand, autn):
     r = readers()
     connection = r[int(reader_index)].createConnection()
     connection.connect()
-    data, sw1, sw2 = connection.transmit(toBytes('00A40000023F00'))    
-    data, sw1, sw2 = connection.transmit(toBytes('00A40000022F00')) 
-    data, sw1, sw2 = connection.transmit(toBytes('00A4040010A0000000871002FFFFFFFF8903050001'))   
-    data, sw1, sw2 = connection.transmit(toBytes('008800812210' + rand.upper() + '10' + autn.upper()))   
+    data, sw1, sw2 = transceive_apdu(connection, '00A40004023F00')
+    data, sw1, sw2 = transceive_apdu(connection, '00A40004022F00')
+    data, sw1, sw2 = transceive_apdu(connection, '00A4040010a0000000871002ff4994208903100000')
+    data, sw1, sw2 = transceive_apdu(connection, '008800812210' + rand.upper() + '10' + autn.upper())
     if sw1 == 97:
-        data, sw1, sw2 = connection.transmit(toBytes('00C00000') + [sw2])         
-        result = toHexString(data).replace(" ", "")
-        res = result[4:20]
-        ck = result[22:54]
-        ik = result[56:88]          
+        data, sw1, sw2 = transceive_apdu(connection, '00C00000%02x' % sw2)
+        res = data[4:20]
+        ck = data[22:54]
+        ik = data[56:88]          
 
     return res, ck, ik
 
