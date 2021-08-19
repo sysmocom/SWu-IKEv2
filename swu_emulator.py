@@ -11,6 +11,8 @@ import subprocess
 import multiprocessing
 import requests
 
+from os.path import expanduser
+
 from optparse import OptionParser
 from binascii import hexlify, unhexlify
 
@@ -1789,6 +1791,9 @@ class swu():
         print('SK_IPSEC_AR',toHex(self.SK_IPSEC_AR))
         print('SK_IPSEC_EI',toHex(self.SK_IPSEC_EI))
         print('SK_IPSEC_ER',toHex(self.SK_IPSEC_ER))        
+
+        self.print_wireshark_esp_sa()
+
         
         
     def generate_keying_material(self):
@@ -1865,6 +1870,18 @@ class swu():
         print('SK_AR',toHex(self.SK_AR))
         print('SK_EI',toHex(self.SK_EI))
         print('SK_ER',toHex(self.SK_ER))
+
+
+    def print_wireshark_esp_sa(self):
+        with open(expanduser("~/.wireshark/esp_sa"), "a") as file_obj:
+            # ~/.wireshark/esp_sa outgoing packets
+            file_obj.write('"IPv4","%s","%s","0x%s","AES-CBC [RFC3602]","0x%s","HMAC-SHA-1-96 [RFC2404]","0x%s"\n' %
+                            (self.source_address, self.epdg_address, toHex(self.spi_resp_child),
+                             toHex(self.SK_IPSEC_EI), toHex(self.SK_IPSEC_AI)) )
+            # ~/.wireshark/esp_sa incoming packets
+            file_obj.write('"IPv4","%s","%s","0x%s","AES-CBC [RFC3602]","0x%s","HMAC-SHA-1-96 [RFC2404]","0x%s"\n' %
+                            (self.epdg_address, self.source_address, toHex(self.spi_init_child),
+                             toHex(self.SK_IPSEC_ER), toHex(self.SK_IPSEC_AR)) )
 
         
     def prf_plus(self,algorithm,key,stream,size):
@@ -2164,11 +2181,19 @@ class swu():
             
             print('IKE SPI INITIATOR',toHex(self.ike_spi_initiator))
             print('IKE SPI RESPONDER',toHex(self.ike_spi_responder))
+
+            self.print_wireshark_ikev2()
             
             return OK,''
         else:
             return DECODING_ERROR,'DECODING_ERROR'
 
+    def print_wireshark_ikev2(self):
+        with open(expanduser("~/.wireshark/ikev2_decryption_table"), "a") as file_obj:
+            # ~/.wireshark/ikev2_decryption_table outgoing packets
+            file_obj.write('%s,%s,%s,%s,"AES-CBC-128 [RFC3602]",%s,%s,"HMAC_SHA1_96 [RFC2404]"\n' %
+                            (toHex(self.ike_spi_initiator), toHex(self.ike_spi_responder),
+                             toHex(self.SK_EI), toHex(self.SK_ER), toHex(self.SK_AI), toHex(self.SK_AR) ) )
 
     def state_2(self):
         self.message_id_request += 1
