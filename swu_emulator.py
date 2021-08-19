@@ -1390,19 +1390,16 @@ class swu():
             self.exec_in_netns("route -A inet6 add 8000::/1 dev " + self.tun_device)
         
         
-        #if self.dns_address_list != [] or self.dnsv6_address_list != []:
-            #subprocess.call("cp /etc/resolv.conf /etc/resolv.backup.conf", shell=True)  
-            #subprocess.call("echo > /etc/resolv.conf", shell=True) 
-            #for i in self.dns_address_list:
-                #subprocess.call("echo 'nameserver " + i +"' >> /etc/resolv.conf", shell=True)  
-            #for i in self.dnsv6_address_list:
-                #subprocess.call("echo 'nameserver " + i +"' >> /etc/resolv.conf", shell=True)
-
+        if self.dns_address_list != [] or self.dnsv6_address_list != []:
+            if self.netns_name:
+                with open("/etc/netns/%s/resolv.conf" % self.netns_name, "w") as file_obj:
+                    for i in self.dns_address_list:
+                        file_obj.write("nameserver %s\n" % i)
+                    for i in self.dnsv6_address_list:
+                        file_obj.write("nameserver %s\n" % i)
 
     def delete_routes(self):
         self.exec_in_netns("route del " + self.server_address[0] + "/32", shell=True)
-        #if self.dns_address_list != []:
-            #subprocess.call("cp /etc/resolv.backup.conf /etc/resolv.conf", shell=True)
         os.close(self.tunnel)      
         if self.netns_name:
             subprocess.call("ip netns del %s" % self.netns_name, shell=True)
